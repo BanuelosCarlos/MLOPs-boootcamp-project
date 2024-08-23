@@ -8,6 +8,7 @@ __pycache__/
 
 # Folders
 data/
+notebooks/catboost_info/
 
 # Distribution / packaging
 .Python
