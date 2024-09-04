@@ -5,13 +5,11 @@ from sklearn.metrics import mean_squared_error
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
-from catboost import CatBoostRegressor
-from lightgbm import LGBMRegressor
+import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import GridSearchCV
+
 import joblib
 import os
 
@@ -186,32 +184,30 @@ def prepare_future_df(DF, future_DF):
     # Initialize an empty list to store future features
     future_features = []
     days_in_future = len(future_DF.index)
-
+    
     # Initialize future DataFrame with correct lags and rolling mean
     for i in range(days_in_future):
         if i == 0:
-            future_DF.loc[i, "Lag1"] = DF.iloc[-1]["income"]
-            future_DF.loc[i, "Lag3"] = DF.iloc[-3]["income"]
-            future_DF.loc[i, "RollingMean"] = DF.iloc[-3:]["income"].mean()
+            # For the first prediction, use the historical DF values
+            future_DF.loc[i, 'Lag1'] = DF.iloc[-1]['income']
+            future_DF.loc[i, 'Lag3'] = DF.iloc[-3]['income']
+            future_DF.loc[i, 'RollingMean'] = DF.iloc[-3:]['income'].mean()
         else:
-            future_DF.loc[i, "Lag1"] = future_DF.loc[i - 1, "Predicted_Income"]
-            future_DF.loc[i, "Lag3"] = (
-                future_DF.loc[i - 3, "Predicted_Income"]
-                if i > 2
-                else DF.iloc[-2]["income"]
-            )
-            future_DF.loc[i, "RollingMean"] = (
-                np.mean(future_DF.loc[i - 3 : i - 1, "Predicted_Income"])
-                if i >= 3
-                else DF.iloc[-3:]["income"].mean()
-            )
+            # For subsequent predictions, check if 'Predicted_Income' exists
+            if 'Predicted_Income' in future_DF.columns:
+                future_DF.loc[i, 'Lag1'] = future_DF.loc[i - 1, 'Predicted_Income']
+                future_DF.loc[i, 'Lag3'] = future_DF.loc[i - 3, 'Predicted_Income'] if i > 2 else DF.iloc[-2]['income']
+                future_DF.loc[i, 'RollingMean'] = np.mean(future_DF.loc[i - 3:i - 1, 'Predicted_Income']) if i >= 3 else DF.iloc[-3:]['income'].mean()
+            else:
+                # Use historical DF for initial lag and rolling mean values
+                future_DF.loc[i, 'Lag1'] = DF.iloc[-1]['income']
+                future_DF.loc[i, 'Lag3'] = DF.iloc[-3]['income']
+                future_DF.loc[i, 'RollingMean'] = DF.iloc[-3:]['income'].mean()
 
         # Prepare features for the current prediction
-        X_future = future_DF.loc[
-            i, ["Lag1", "Lag3", "RollingMean", "Year", "Month", "Day"]
-        ].values
+        X_future = future_DF.loc[i, ['Lag1', 'Lag3', 'RollingMean', 'Year', 'Month', 'Day']].values
         future_features.append(X_future)
-
+    
     return future_DF, future_features
 
 
@@ -234,7 +230,7 @@ def plot_forecasting(forecasting, DF):
     plt.ylabel("Income")
     plt.title(f"Income Prediction for the Next {len(forecasting.index)} Days")
     plt.legend()
-    plt.show()
+    plt.savefig('/home/aleksei/Desktop/projects/MLOPs-boootcamp-project/figures/plot.png')
 
 
 def save_model(final_model):
