@@ -13,6 +13,20 @@ from sklearn.model_selection import GridSearchCV
 import joblib
 import os
 
+def load_data(filepath, filepath_destination):
+    df = pd.read_csv(filepath, encoding='unicode_escape')
+
+    df['InvoiceDate'] = (pd.to_datetime(df['InvoiceDate']).
+                            dt.strftime('%Y-%m-%d'))
+    (df
+        .groupby('InvoiceDate')
+        .sum()
+        .reset_index()
+        .assign(income = lambda df: df.Quantity*df.UnitPrice)
+        .rename(columns={'InvoiceDate':'date'})
+        [['date', 'income']]
+        .to_csv(filepath_destination)
+    )
 
 def feature_engineering(DF):
     for lag in range(1, 5, 2):
@@ -46,32 +60,66 @@ def create_pipeline(model):
     pipeline = Pipeline([("scaler", StandardScaler()), ("model", model)])
     return pipeline
 
-
-# Function to train and evaluate models
-def set_train_and_evaluation(model, X_train, y_train, X_test, y_test):
-    pipeline = create_pipeline(model)
-    pipeline.fit(X_train, y_train)
-    predictions = pipeline.predict(X_test)
-    mse = mean_squared_error(y_test, predictions)
-    return mse
-
-
-def get_best_model(models, X_train, X_test, y_train, y_test):
+def get_best_model(models, X_train, X_test, y_train, y_test, plot_filepath):
+    errors = {}
     results = {}
+    predictions_dict = {}
+
+    # Convert y_test to a NumPy array for calculations
+    y_test_array = y_test.values.flatten()  # Flatten to ensure it's 1D
+
     # Train and evaluate each model
     for name, model in models.items():
-        results[name] = set_train_and_evaluation(
-            model, X_train, y_train, X_test, y_test
-        )
+        pipeline = create_pipeline(model)
+        pipeline.fit(X_train, y_train)
+        predictions = pipeline.predict(X_test).flatten()  # Ensure predictions are also 1D
+        
+        # Calculate mean squared error
+        mse = mean_squared_error(y_test_array, predictions)
+        
+        # Calculate relative error: sum of absolute differences divided by actual sum
+        relative_error = np.abs(np.sum(y_test_array) - np.sum(predictions)) / np.sum(y_test_array)
+        
+        # Store the mse, relative error, and predictions for each model
+        errors[name] = relative_error
+        results[name] = mse
+        predictions_dict[name] = predictions
 
-    best_model_df = (
-        pd.DataFrame(results.items())
-        .rename(columns={0: "model", 1: "mse"})
-        .sort_values("mse", ascending=True)
-        .head(1)
+    # Convert results and errors into a DataFrame
+    results_df = pd.DataFrame({
+        'model': results.keys(),
+        'mse': results.values(),
+        'relative_error': errors.values()
+    }).sort_values('mse', ascending=True)
+
+    # Identify the best model based on MSE
+    best_model_name = results_df.iloc[0]["model"]
+    best_mse = results_df.iloc[0]["mse"]
+    best_relative_error = results_df.iloc[0]["relative_error"]
+
+    print(f"Best Model: {best_model_name}, MSE: {best_mse}, Relative Error: {best_relative_error:.4f}")
+
+    # Plot the predictions of the best model against the actual values
+    sns.set()
+    plt.figure(figsize=(10, 6))
+    plt.plot(y_test.index, y_test_array, label="Actual", color="blue", linestyle="-")
+    plt.plot(
+        y_test.index,
+        predictions_dict[best_model_name],
+        label=f"Predicted ({best_model_name})",
+        color="red",
+        linestyle="--",
     )
-    print(best_model_df)
-    return best_model_df["model"].values[0]
+    plt.xlabel("Date")
+    plt.ylabel("Income")
+    plt.title(f"Actual vs Predicted Income for Best Model: {best_model_name}")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(plot_filepath)
+
+    # Return the best model name
+    return best_model_name
+
 
 
 def get_best_params(models, X_train, y_train, best_model):
@@ -211,7 +259,7 @@ def prepare_future_df(DF, future_DF):
     return future_DF, future_features
 
 
-def plot_forecasting(forecasting, DF):
+def plot_forecasting(forecasting, DF, plot_filepath):
     # Print the predicted values
     sns.set()
     print(forecasting[["date", "Predicted_Income"]])
@@ -230,12 +278,13 @@ def plot_forecasting(forecasting, DF):
     plt.ylabel("Income")
     plt.title(f"Income Prediction for the Next {len(forecasting.index)} Days")
     plt.legend()
-    plt.savefig('/home/aleksei/Desktop/projects/MLOPs-boootcamp-project/figures/plot.png')
+    plt.grid(True)
+    plt.savefig(plot_filepath)
 
 
-def save_model(final_model):
+def save_model(final_model, path):
     model_filename = "forecasting_income_model.pkl"
-    models_dir = os.path.join(os.path.dirname(os.getcwd()), "models")
+    models_dir = path
     os.makedirs(models_dir, exist_ok=True)
     model_path = os.path.join(models_dir, model_filename)
     # Save the model
