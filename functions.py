@@ -74,12 +74,11 @@ def get_best_model(models, X_train, X_test, y_train, y_test, plot_filepath):
         pipeline.fit(X_train, y_train)
         predictions = pipeline.predict(X_test).flatten()  # Ensure predictions are also 1D
         
-        # Calculate mean squared error
+        # Calculate mean squared error (MSE)
         mse = mean_squared_error(y_test_array, predictions)
         
         # Calculate relative error: sum of absolute differences divided by actual sum
-        relative_error = np.abs(np.sum(y_test_array) - np.sum(predictions)) / np.sum(y_test_array)
-        
+        relative_error = (np.sum(y_test_array) - np.sum(predictions)) / np.sum(y_test_array)
         # Store the mse, relative error, and predictions for each model
         errors[name] = relative_error
         results[name] = mse
@@ -96,8 +95,12 @@ def get_best_model(models, X_train, X_test, y_train, y_test, plot_filepath):
     best_model_name = results_df.iloc[0]["model"]
     best_mse = results_df.iloc[0]["mse"]
     best_relative_error = results_df.iloc[0]["relative_error"]
+    print(results_df)
 
-    print(f"Best Model: {best_model_name}, MSE: {best_mse}, Relative Error: {best_relative_error:.4f}")
+    # MSE in scientific notation
+    best_mse_sci = f"{best_mse:.3e}"
+
+    print(f"Best Model: {best_model_name}, MSE: {best_mse_sci}, Relative Error: {best_relative_error:.4f}")
 
     # Plot the predictions of the best model against the actual values
     sns.set()
@@ -112,14 +115,21 @@ def get_best_model(models, X_train, X_test, y_train, y_test, plot_filepath):
     )
     plt.xlabel("Date")
     plt.ylabel("Income")
-    plt.title(f"Actual vs Predicted Income for Best Model: {best_model_name}")
+    
+    # Title includes MSE (in scientific notation) and Relative Error
+    plt.title(f"Actual vs Predicted Income for Best Model: {best_model_name}\nMSE: {best_mse_sci}, Relative Error: {best_relative_error:.4%}")
+    
+    # Adding MSE (scientific notation) and Relative Error as text annotations on the plot
+    plt.text(0.017, 0.85, f"MSE: {best_mse_sci}\nRelative Error: {best_relative_error:.4%}",
+             transform=plt.gca().transAxes, fontsize=12,
+             verticalalignment='top', bbox=dict(boxstyle="round,pad=0.3", edgecolor="black", facecolor="white"))
+    
     plt.legend()
     plt.grid(True)
     plt.savefig(plot_filepath)
 
     # Return the best model name
     return best_model_name
-
 
 
 def get_best_params(models, X_train, y_train, best_model):
